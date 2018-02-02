@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>SpaceMiner</title>
+    <script type="text/javascript" src="../libs/three.js"></script>
+    <script type="text/javascript" src="../libs/OBJLoader.js"></script>
+    <script type="text/javascript" src="../libs/MTLLoader.js"></script>
+    <script type="text/javascript" src="../libs/OBJMTLLoader.js"></script>
+	<script type="text/javascript" src="../libs/ConvexGeometry.js"></script>
+	<script type="text/javascript" src="../libs/ParametricGeometries.js"></script>
+
+	<script type="text/javascript" src="../Game/THREE.TargetCamera.js"></script>
+	
+    <script type="text/javascript" src="../libs/stats.js"></script>
+    <script type="text/javascript" src="../libs/chroma.js"></script>
+    <script type="text/javascript" src="../libs/SpaceControls.js"></script>
+
+    <style>
+        body {
+            /* set margin to 0 and overflow to hidden, to go fullscreen */
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Div to display score -->
+<div id ="ScoreDisplay"></div>
+
+<div id="Stats-output"></div>
+<!-- Div which will hold the Output -->
+<div id="WebGL-output"></div>
+
+<script id="vertexShader" type="x-shader/x-vertex">
+// This vertex shader draws a sphere using parameterized lattitude/longitude coordinates
+// the normal is (fx,fy,1)
+varying vec3 N;
+varying vec3 v;
+varying vec3 light;
+varying vec2 vUv;
+uniform float gtime;
+
+void main(void)  
+{     
+vUv = uv;
+gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); 
+}  
+  </script>
+
+<script id="fragmentShader" type="x-shader/x-fragment">
+uniform sampler2D asteroid;
+uniform vec3 ambient;
+uniform vec3 diffuse;
+uniform vec3 specular;
+uniform float shininess;
+uniform float blinnphong;
+uniform float red;
+uniform float green;
+uniform float blue;
+uniform float uTime;
+
+void main(void)
+{
+gl_FragColor = vec4(.7, cos(uTime), sin(uTime), 1.0);
+}
+
+
+</script>
+
+
+<!-- The game itself ---------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------>
+<script type="text/javascript">
+	var score = 0;
+	var gameover = false;
+	var end = false;
+	var uniforms;
+
+    function init() {
+
+        var stats = initStats();
+
+		var clock = new THREE.Clock();
+		
+        // create a scene that will hold all our elements such as objects, cameras and lights.
+        scene = new THREE.Scene();
+
+		// create a render and set the size
+        var webGLRenderer = new THREE.WebGLRenderer();
+        webGLRenderer.setClearColor(new THREE.Color(0xD8CEF6, 1.0));
+        webGLRenderer.setSize(window.innerWidth, window.innerHeight);
+        webGLRenderer.shadowMapEnabled = true;
+       
+		/* Setting up the player and camera ---------------------------------------------------------------------------------*/
+		
+		//add camera
+        camera = new THREE.TargetCamera(45, window.innerWidth / window.innerHeight, 0.1, 3000);
+		
+		//add ship
+		ship = new THREE.Mesh( new THREE.BoxGeometry(.1,.1,.1), new THREE.MeshLambertMaterial({color: 0xff0000}) );
+		ship.position.x = 0;
+		ship.position.y = 0;
+		ship.position.z = 0;
+		scene.add(ship);
+		
+		//special TargetCamera stuff!
+		camera.addTarget({
+			name: 'player',
+			targetObject: ship,
+			cameraPosition: new THREE.Vector3(0, 0, 30),
+			fixed: false,
+			stiffness: 0.1,
+			matchRotation: true
+		});
+		camera.setTarget( 'player' );
+		
+		//uses modified FirstPersonControls to control ship
+		var shipControls = new THREE.SpaceControls(ship);
+        shipControls.lookSpeed = 0.4;
+        shipControls.movementSpeed = 30;
+        shipControls.verticalMin = 1.0;
+        shipControls.verticalMax = 2.0;
+		shipControls.autoForward = true;
+		
+		// Set up custom shaders for the ship
+        uniforms = {
+        	ambient: { type: "c", value: new THREE.Color(0x090909)},
+        	diffuse: { type: "c", value: new THREE.Color(0x0000ff) },
+			specular: { type: "c", value: new THREE.Color(0x00ff00) },
+			shininess: {type: "f",value:100.0, min:0.0, max:1023.0},
+			blinnphong: {type: "f",value:0.0, min:0.0, max:1.0},
+			uTime: { type: "f", value: 0.0 },
+			red: { type: "f", value: 1.0 },
+			green: { type: "f", value: 1.0 },
+			blue: { type: "f", value: 1.0 }
+        };
+		var vertexShader = document.getElementById('vertexShader').text;
+    	var fragmentShader = document.getElementById('fragmentShader').text;
+	
+    	superMaterial = new THREE.ShaderMaterial(
+        {
+          uniforms : uniforms,
+          vertexShader : vertexShader,
+          fragmentShader : fragmentShader,
+        });
+		
+		//loads in the model for the ship
+		loader = new THREE.JSONLoader();
+		loader.load('../assets/models/SimpleSpaceship.json', function (model, mat) {
+
+			shipbody = new THREE.SkinnedMesh(model,mat[0,1,2,3] );
+		
+			ship.position.x = 0;
+			ship.position.y = 0;
+			ship.position.z = 0;
+			
+			scene.add(shipbody);
+			ship.add(shipbody); //attaches it to the ship
+
+		}, '../assets/models');
+		
+		/* Done setting up player and camera ------------------------------------------------------------------------------*/
+		
+		
+		/* ----------------------- Loading in a texure cube -------------------------------------------------------------- */
+		var urls = [ //not fancy, just the same image six times, so not particularly realistic at some edges
+			"../assets/textures/tileable-classic-nebula.jpg", "../assets/textures/tileable-classic-nebula.jpg",
+			"../assets/textures/tileable-classic-nebula.jpg", "../assets/textures/tileable-classic-nebula.jpg",
+			"../assets/textures/tileable-classic-nebula.jpg", "../assets/textures/tileable-classic-nebula.jpg",
+		];
+		
+		var textureCube = THREE.ImageUtils.loadTextureCube( urls );
+		reflectivematerial = new THREE.MeshBasicMaterial( { color: 0x66FFFF, envMap: textureCube } ); //for the stealth asteroids
+		
+		/* ----------- Creating the skybox from the texture cube --------------------------------------------------------- */
+		var shader = THREE.ShaderLib[ "cube" ];
+		shader.uniforms[ "tCube" ].value = textureCube;
+		
+		var boxmaterial = new THREE.ShaderMaterial( {
+			fragmentShader: shader.fragmentShader,
+			vertexShader: shader.vertexShader,
+			uniforms: shader.uniforms,
+			depthWrite: false,
+			side: THREE.BackSide
+		});
+					 
+		skybox = new THREE.Mesh( new THREE.BoxGeometry( 2000, 2000, 2000 ), boxmaterial );
+		scene.add( skybox );	
+		
+		/* Finished with sky box ------------------------------------------------*/
+		
+		
+		//adding the objects to the game 
+		addGold();
+		addAsteroids();
+		addStealthAsteroids()
+		addFluff();
+
+		//adding the lights to the game
+        var light = new THREE.AmbientLight( 0x404040 ); // soft white light
+		scene.add( light );
+    
+		var directionalLight = new THREE.DirectionalLight(0xffffff);
+		directionalLight.position.set(1, 1, 1).normalize();
+		scene.add(directionalLight);
+	
+		var spotLight = new THREE.SpotLight(0xffffff);
+		spotLight.position.set(-40, 60, -10);
+		spotLight.castShadow = true;
+		scene.add(spotLight);
+
+        //adding the output of the renderer to the html element
+        document.getElementById("WebGL-output").appendChild(webGLRenderer.domElement);
+
+		//call render
+        var step = 0;
+        render();
+		
+		
+		/* Functions ----------------------------------------------------------------------------------------------------------*/
+		
+		function addStealthAsteroids(){
+			var asteroidshape = new THREE.SphereGeometry(6,6,6);
+			var asteroidmaterial = reflectivematerial;
+
+			var asteroids = [];
+			
+			for (i = 0; i < 20; i++) {
+				asteroids.push(new THREE.Mesh(asteroidshape, asteroidmaterial)); asteroids[i].name = 'asteroid';
+				var randCoordX = Math.floor((Math.random() * 600) -200);
+				var randCoordY = Math.floor((Math.random() * 600) -200);
+				var randCoordZ = Math.floor((Math.random() * 600) -200);
+				var randScale = Math.floor((Math.random() * 7.5) + 1);
+				asteroids[i].position.x = randCoordX;
+				asteroids[i].position.y = randCoordY;
+				asteroids[i].position.z = randCoordZ;
+				asteroids[i].rotation.x = randCoordX;
+				asteroids[i].rotation.y = randCoordY;
+				asteroids[i].rotation.z = randCoordZ;
+				asteroids[i].scale.x = randScale; asteroids[i].scale.y = randScale; asteroids[i].scale.z = randScale;
+				scene.add(asteroids[i]);
+			}
+			
+		}
+
+		function addAsteroids() {
+
+			var asteroidImage = THREE.ImageUtils.loadTexture("../assets/textures/asteroid.jpg");
+			//asteroidImage.magFilter = THREE.NearestFilter;
+    	
+			var asteroidshape = new THREE.SphereGeometry(6,6,6);
+
+			var asteroidmaterial = new THREE.MeshPhongMaterial({reflectivematerial});
+			 asteroidmaterial.map = asteroidImage;
+			
+			var asteroids = [];
+
+			
+			for (i = 0; i < 75; i++) {
+				asteroids.push(new THREE.Mesh(asteroidshape, asteroidmaterial)); asteroids[i].name = 'asteroid';
+				var randCoordX = Math.floor((Math.random() * 500) -200);
+				var randCoordY = Math.floor((Math.random() * 500) -200);
+				var randCoordZ = Math.floor((Math.random() * 500) -200);
+				var randScale = Math.floor((Math.random() * 8) + 1);
+				asteroids[i].position.x = randCoordX;
+				asteroids[i].position.y = randCoordY;
+				asteroids[i].position.z = randCoordZ;
+				asteroids[i].rotation.x = randCoordX;
+				asteroids[i].rotation.y = randCoordY;
+				asteroids[i].rotation.z = randCoordZ;
+				asteroids[i].scale.x = randScale; asteroids[i].scale.y = randScale; asteroids[i].scale.z = randScale;
+				scene.add(asteroids[i]);
+			}
+			
+			/*I liked the coordinates of this asteroid, so I'm keeping them
+			a1.position.x = 60;
+			a1.position.y = 7;
+			a1.position.z = 32;
+			*/
+		}
+		
+		function addFluff() {
+			var crystalshape = new THREE.TorusKnotGeometry(2, .5);
+			
+			var crystals = [];
+
+			
+			for (i = 0; i < 5; i++) {
+				crystals.push(new THREE.Mesh(crystalshape, superMaterial)); crystals[i].name = 'crystal';
+				var randCoordX = Math.floor((Math.random() * 500) -250);
+				var randCoordY = Math.floor((Math.random() * 500) -250);
+				var randCoordZ = Math.floor((Math.random() * 500) -250);
+				crystals[i].position.x = randCoordX;
+				crystals[i].position.y = randCoordY;
+				crystals[i].position.z = randCoordZ;
+				scene.add(crystals[i]);
+			}
+
+		}
+		
+		function addGold() {
+			var goldshape = new THREE.SphereGeometry(2,2,2);
+			var goldmaterial = new THREE.MeshLambertMaterial({color: 0xFFD700}); //html code for "gold"
+			
+			var gold = [];
+			
+			for (i = 0; i < 25; i++) {
+				gold.push(new THREE.Mesh(goldshape, goldmaterial)); gold[i].name = 'gold';
+			}
+			
+			gold[0].position.x = 20;gold[0].position.y = 0; gold[0].position.z = 5; scene.add(gold[0]);
+			gold[1].position.x = 73;gold[1].position.y = 12; gold[1].position.z = -100; scene.add(gold[1]);
+			gold[2].position.x = 100;gold[2].position.y = -6; gold[2].position.z = 200; scene.add(gold[2]);
+			gold[3].position.x = 48;gold[3].position.y = 20; gold[3].position.z = 32; scene.add(gold[3]);
+			gold[4].position.x = 33;gold[4].position.y = 120; gold[4].position.z = -67; scene.add(gold[4]);
+			gold[5].position.x = 97;gold[5].position.y = -67; gold[5].position.z = -54; scene.add(gold[5]);
+			gold[6].position.x = -80;gold[6].position.y = 89; gold[6].position.z = -44; scene.add(gold[6]);
+			gold[7].position.x = -150;gold[7].position.y = 42; gold[7].position.z = -210; scene.add(gold[7]);
+			gold[8].position.x = -75;gold[8].position.y = 149; gold[8].position.z = 170; scene.add(gold[8]);
+			gold[9].position.x = 91;gold[9].position.y = -73; gold[9].position.z = 123; scene.add(gold[9]);
+			gold[10].position.x = -46;gold[10].position.y = 134; gold[10].position.z = 87; scene.add(gold[10]);
+			gold[11].position.x = -42;gold[11].position.y = 99; gold[11].position.z = 105; scene.add(gold[11]);
+			gold[12].position.x = -67;gold[12].position.y = -99; gold[12].position.z = 57; scene.add(gold[12]);
+			gold[13].position.x = 67;gold[13].position.y = 36; gold[13].position.z = -80; scene.add(gold[13]);
+			gold[14].position.x = 183;gold[14].position.y = 236; gold[14].position.z = 12; scene.add(gold[14]);
+			gold[15].position.x = 250;gold[15].position.y = 11; gold[15].position.z = 0; scene.add(gold[15]);
+			gold[16].position.x = -200;gold[16].position.y = 27; gold[16].position.z = -1; scene.add(gold[16]);
+			gold[17].position.x = 137;gold[17].position.y = 69; gold[17].position.z = 45; scene.add(gold[17]);
+			gold[18].position.x = 211;gold[18].position.y = 90; gold[18].position.z = 9; scene.add(gold[18]);
+			gold[19].position.x = -145;gold[19].position.y = 82; gold[19].position.z = 123; scene.add(gold[19]);
+			gold[20].position.x = -6;gold[20].position.y = 43; gold[20].position.z = 0; scene.add(gold[20]);
+			gold[21].position.x = -78;gold[21].position.y = -30; gold[21].position.z = -89; scene.add(gold[21]);
+			gold[22].position.x = 52;gold[22].position.y = -150; gold[22].position.z = -189; scene.add(gold[22]);
+			gold[23].position.x = -213;gold[23].position.y = -70; gold[23].position.z = 32; scene.add(gold[23]);
+			gold[24].position.x = 154;gold[24].position.y = -60; gold[24].position.z = 10; scene.add(gold[24]);
+			
+		}
+		
+		
+		
+        function render() {
+            stats.update();
+            
+			uniforms.uTime.value += .01;
+			var delta = clock.getDelta();
+            shipControls.update(delta);
+			
+			webGLRenderer.clear();
+			
+			requestAnimationFrame(render);
+			
+			//TargetCamera function
+			camera.update();
+			camera.lookAt(ship.position);//because TargetCamera doesn't work for some reason
+			
+			scene.traverse(function(x){
+				if (x.name == 'gold') {
+					x.rotation.y += delta*1.5;
+					x.rotation.x += delta * 0.5;
+					if (x.position.distanceTo(ship.position) <= 5.0) {
+						scene.remove(x); score++; console.log('Score:' + score); shipControls.movementSpeed += 2;
+						}
+				} else if (x.name == 'asteroid') {
+					x.rotation.y += .7 * delta/(x.scale.x);
+					x.rotation.z += .5 * delta/(x.scale.x);
+					if (x.position.distanceTo(ship.position) <= x.scale.x * 5.6){
+					gameover = true;
+					}
+				} else if (x.name == 'crystal') {
+					x.rotation.y += delta*3;
+					x.rotation.x += delta *5;
+					x.rotation.z += delta;
+					if (x.position.distanceTo(ship.position) <= 5.0) {
+						scene.remove(x); score+= 3; console.log('Score:' + score); shipControls.movementSpeed += 2;
+						}
+				}
+			});
+			
+			if (gameover) {
+				if (!end) {console.log('game over'); end = true;}
+				shipControls.autoForward = false;
+			} else if (score >= 25) {
+				if (!end) {console.log('you win!'); end = true;}
+				shipControls.autoForward = false;
+			}
+			
+			webGLRenderer.render(scene, camera);
+        }
+
+        function initStats() {
+
+            var stats = new Stats();
+            stats.setMode(0); // 0: fps, 1: ms
+
+            // Align top-left
+            stats.domElement.style.position = 'absolute'
+            stats.domElement.style.left = '0px';
+            stats.domElement.style.top = '0px';
+
+            document.getElementById("Stats-output").appendChild(stats.domElement);
+
+            return stats;
+        }
+		
+    }
+    window.onload = init;
+</script>
+</body>
+</html>

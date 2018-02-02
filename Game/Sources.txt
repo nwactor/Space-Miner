@@ -1,0 +1,5 @@
+https://github.com/squarefeet/THREE.TargetCamera
+
+mrdoob THREE.FirstPersonControls
+
+http://s3.amazonaws.com/everystockphoto/fspid31/31/20/26/1/tileable-classic-nebula-3120261-o.jpg
