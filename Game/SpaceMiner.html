@@ -31,49 +31,45 @@
 <div id ="ScoreDisplay"></div>
 
 <div id="Stats-output"></div>
+
 <!-- Div which will hold the Output -->
 <div id="WebGL-output"></div>
 
 <script id="vertexShader" type="x-shader/x-vertex">
-// This vertex shader draws a sphere using parameterized lattitude/longitude coordinates
-// the normal is (fx,fy,1)
-varying vec3 N;
-varying vec3 v;
-varying vec3 light;
-varying vec2 vUv;
-uniform float gtime;
+	// This vertex shader draws a sphere using parameterized lattitude/longitude coordinates
+	// the normal is (fx,fy,1)
+	varying vec3 N;
+	varying vec3 v;
+	varying vec3 light;
+	varying vec2 vUv;
+	uniform float gtime;
 
-void main(void)  
-{     
-vUv = uv;
-gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); 
-}  
-  </script>
-
-<script id="fragmentShader" type="x-shader/x-fragment">
-uniform sampler2D asteroid;
-uniform vec3 ambient;
-uniform vec3 diffuse;
-uniform vec3 specular;
-uniform float shininess;
-uniform float blinnphong;
-uniform float red;
-uniform float green;
-uniform float blue;
-uniform float uTime;
-
-void main(void)
-{
-gl_FragColor = vec4(.7, cos(uTime), sin(uTime), 1.0);
-}
-
-
+	void main(void)  {     
+		vUv = uv;
+		gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); 
+	}  
 </script>
+<script id="fragmentShader" type="x-shader/x-fragment">
+	uniform sampler2D asteroid;
+	uniform vec3 ambient;
+	uniform vec3 diffuse;
+	uniform vec3 specular;
+	uniform float shininess;
+	uniform float blinnphong;
+	uniform float red;
+	uniform float green;
+	uniform float blue;
+	uniform float uTime;
 
-
-<!-- The game itself ---------------------------------------------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------------------------------------------------------------->
+	void main(void) {
+		gl_FragColor = vec4(.7, cos(uTime), sin(uTime), 1.0);
+	}
+</script>
 <script type="text/javascript">
+//==========================================================
+//===============The Game Itself============================
+//==========================================================
+
 	var score = 0;
 	var gameover = false;
 	var end = false;
