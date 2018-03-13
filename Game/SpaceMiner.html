@@ -31,6 +31,14 @@
         	padding: 1%;
         	border: 2px solid purple;
         }
+        #GameOver {
+        	display: none;
+        	position: absolute;
+        	left: 40%;
+        	top: 40%;
+        	background-color: gold;
+        	padding: 5%;
+        }
     </style>
 </head>
 <body>
@@ -39,6 +47,11 @@
 <div id ="ScoreDisplay">
 	<span>Score: </span>
 	<span id="score"></span>
+</div>
+
+<div id="GameOver">
+	<span id="endMessage"></span>
+	<button id="restart-button" onclick="location.reload();">Start Over</button>
 </div>
 
 <div id="Stats-output"></div>
@@ -341,8 +354,7 @@
 		gold[21].position.x = -78;gold[21].position.y = -30; gold[21].position.z = -89; scene.add(gold[21]);
 		gold[22].position.x = 52;gold[22].position.y = -150; gold[22].position.z = -189; scene.add(gold[22]);
 		gold[23].position.x = -213;gold[23].position.y = -70; gold[23].position.z = 32; scene.add(gold[23]);
-		gold[24].position.x = 154;gold[24].position.y = -60; gold[24].position.z = 10; scene.add(gold[24]);
-		
+		gold[24].position.x = 154;gold[24].position.y = -60; gold[24].position.z = 10; scene.add(gold[24]);	
 	}
 	
 	
@@ -387,11 +399,17 @@
 		});
 		
 		if (gameover) {
-			if (!end) {console.log('game over'); end = true;}
+			if (!end) { end = true;}
 			shipControls.autoForward = false;
+
+			document.getElementById('GameOver').style.display = 'block';
+			document.getElementById('endMessage').innerHTML = 'You crashed! Try again!';
 		} else if (score >= 25) {
-			if (!end) {console.log('you win!'); end = true;}
+			if (!end) { end = true;}
 			shipControls.autoForward = false;
+
+			document.getElementById('GameOver').style.display = 'block';
+			document.getElementById('endMessage').innerHTML = 'You win!';
 		}
 		
 		webGLRenderer.render(scene, camera);
